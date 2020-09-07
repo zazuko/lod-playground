@@ -1,0 +1,177 @@
+version: "3.4"
+
+services:
+  traefik:
+    image: traefik:v2.2
+
+    command:
+      - --api
+      - --providers.docker
+      - --providers.docker.exposedbydefault=false
+
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.dashboard.rule: "Host(`traefik.localhost`)"
+      traefik.http.routers.dashboard.service: "api@internal"
+
+    networks:
+      internal:
+        aliases:
+          - dex.localhost
+          - fuseki.localhost
+          - datacube.localhost
+          - traefik.localhost
+          - s3.localhost
+          - data-cube-curation.s3.localhost
+
+    ports:
+      - "80:80"
+
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock" # Expose the Docker API
+
+  fuseki:
+    build: fuseki/
+    command:
+      - /jena-fuseki/fuseki-server
+      - -config=/config.ttl
+
+    networks:
+      - internal
+
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.fuseki.rule: "Host(`fuseki.localhost`)"
+      traefik.http.services.fuseki.loadbalancer.server.port: "3030"
+
+
+    environment:
+      ADMIN_PASSWORD: admin
+
+    volumes:
+      - "fuseki-data:/fuseki"
+      - "./fuseki/config.ttl:/config.ttl:ro"
+
+  data-cube-curation:
+    image: zazuko/datacube:latest
+
+    networks:
+      - internal
+
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.datacube.rule: "Host(`datacube.localhost`)"
+      traefik.http.services.datacube.loadbalancer.server.port: "8080"
+
+    environment:
+      DEBUG: "*"
+      BASE_URI: http://datacube.localhost/
+      SPARQL_ENDPOINT: http://fuseki:3030/data-cube-write
+      READ_MODEL_SPARQL_ENDPOINT: http://fuseki:3030/data-cube-read
+      GRAPH_STORE_ENDPOINT: http://fuseki:3030/data
+      NODE_ENV: production
+      # AUTH_AUDIENCE: http://datacube.localhost
+      # AUTH_CLIENT_ID: C6nmzW1maozcTgJS214k7MyGS7TwHDgs
+      # AUTH_ISSUER: https://zazuko.eu.auth0.com
+      AUTH_ISSUER: http://dex.localhost
+      AUTH_CONFIG_FILE: "/app/tmp/auth.js"
+      STORAGE: s3
+      AWS_ACCESS_KEY_ID: DATACUBECURATION
+      AWS_SECRET_ACCESS_KEY: DATACUBECURATION
+      AWS_S3_ENDPOINT: http://s3.localhost
+      AWS_S3_BUCKET: data-cube-curation
+
+    volumes:
+      - "./datacube/:/app/tmp:ro"
+
+    healthcheck:
+      disable: true
+
+  trifid:
+    image: zazuko/trifid:latest
+
+    networks:
+      - internal
+
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.trifid.rule: "Host(`data.localhost`)"
+      traefik.http.services.trifid.loadbalancer.server.port: "8080"
+
+    environment:
+      TRIFID_CONFIG: config-custom.json
+      DEBUG: "trifid:*"
+
+    healthcheck:
+      start_period: 5s
+
+    volumes:
+      - "./trifid/config.json:/app/config-custom.json:ro"
+
+  loader:
+    image: alpine:latest
+    tty: true
+
+    depends_on:
+      - fuseki
+
+    networks:
+      - internal
+
+    volumes:
+      - "./data:/data"
+
+  dex:
+    image: quay.io/dexidp/dex:v2.24.0
+
+    command:
+      - serve
+      - /config.yaml
+    user: root # because of volumes permissions
+
+    networks:
+      - internal
+
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.dex.rule: "Host(`dex.localhost`)"
+      traefik.http.routers.dex.middlewares: "dex-cors@docker"
+      traefik.http.services.dex.loadbalancer.server.port: "5556"
+      traefik.http.middlewares.dex-cors.headers.accesscontrolallowmethods: "GET,OPTIONS,PUT"
+      traefik.http.middlewares.dex-cors.headers.accesscontrolalloworiginlist: "http://datacube.localhost"
+      traefik.http.middlewares.dex-cors.headers.accesscontrolmaxage: "100"
+      traefik.http.middlewares.dex-cors.headers.addvaryheader: "true"
+    volumes:
+      - "dex-data:/data"
+      - "./dex/config.yaml:/config.yaml:ro"
+
+  minio:
+    image: minio/minio:latest
+
+    command:
+      - server
+      - /data
+
+    environment:
+      MINIO_ACCESS_KEY: DATACUBECURATION
+      MINIO_SECRET_KEY: DATACUBECURATION
+      MINIO_DOMAIN: s3.localhost
+
+    networks:
+      - internal
+
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.minio.rule: "Host(`s3.localhost`) || HostRegexp(`{.*}.s3.localhost`)"
+      traefik.http.services.minio.loadbalancer.server.port: "9000"
+
+    volumes:
+      - "minio-data:/data"
+
+volumes:
+  fuseki-data:
+  dex-data:
+  minio-data:
+
+networks:
+  internal:

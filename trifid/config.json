@@ -1,0 +1,7 @@
+{
+	"baseConfig": "trifid:config-sparql.json",
+	"sparqlEndpointUrl": "http://fuseki:3030/data/sparql",
+	"listener": {
+		"port": 8080
+	}
+}

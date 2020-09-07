@@ -1,0 +1,64 @@
+@prefix :       <#> .
+@prefix fuseki: <http://jena.apache.org/fuseki#> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix tdb:    <http://jena.hpl.hp.com/2008/tdb#> .
+@prefix ja:     <http://jena.hpl.hp.com/2005/11/Assembler#> .
+@prefix dc:     <http://purl.org/dc/elements/1.1/> .
+
+[] a fuseki:Server ;
+	fuseki:services (
+		<#output>
+		<#data-cube-write>
+		<#data-cube-read>
+	) .
+
+
+# Defines one endpoint:
+#   - /data: SPARQL Graph Store Protocol read/write
+#   - /data/sparql: SPARQL query
+<#output> a fuseki:Service ;
+	rdfs:label                        "Output graph" ;
+	fuseki:name                       "data" ;
+	fuseki:endpoint                   [ fuseki:operation fuseki:gsp-rw ];
+	fuseki:endpoint                   [ 
+		fuseki:operation fuseki:query;
+		fuseki:name "sparql" 
+	];
+	fuseki:dataset                    <#output-ds> ;
+.
+
+<#output-ds> a tdb:DatasetTDB ;
+	tdb:location "output-db" ;
+.
+
+# The table-mapper tool needs two databases to operate
+# Defines two endpoints:
+#   - /data-cube-write/query:  SPARQL query
+#   - /data-cube-write/update: SPARQL update
+<#data-cube-write> a fuseki:Service ;
+	rdfs:label           "Aggregate root repositories" ;
+	fuseki:name          "data-cube-write" ;
+	fuseki:endpoint      [ fuseki:operation fuseki:query ];
+	fuseki:endpoint      [ fuseki:operation fuseki:update ];
+	fuseki:dataset       <#data-cube-write-ds> ;
+.
+
+<#data-cube-write-ds> a tdb:DatasetTDB ;
+	tdb:location "data-cube-write-db" ;
+.
+
+# Defines two endpoints:
+#   - /data-cube-read/query:  SPARQL query
+#   - /data-cube-read/update: SPARQL update
+<#data-cube-read> a fuseki:Service ;
+	rdfs:label           "Read model dataset" ;
+	fuseki:name          "data-cube-read" ;
+	fuseki:endpoint      [ fuseki:operation fuseki:query ];
+	fuseki:endpoint      [ fuseki:operation fuseki:update ];
+	fuseki:dataset       <#data-cube-read-ds>
+.
+
+<#data-cube-read-ds> a tdb:DatasetTDB ;
+	tdb:location "data-cube-read-db" ;
+.
