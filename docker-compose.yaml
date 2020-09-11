@@ -44,7 +44,6 @@ services:
       traefik.http.routers.fuseki.rule: "Host(`fuseki.localhost`)"
       traefik.http.services.fuseki.loadbalancer.server.port: "3030"
 
-
     environment:
       ADMIN_PASSWORD: admin
 
@@ -109,7 +108,7 @@ services:
       - "./trifid/config.json:/app/config-custom.json:ro"
 
   loader:
-    image: alpine:latest
+    build: loader
     tty: true
 
     depends_on:
